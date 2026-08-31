@@ -554,6 +554,7 @@ private fun SpeechRecognitionSandbox() {
     var finalText by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
 
     val recognitionController = remember {
         SpeechRecognitionController(
@@ -566,7 +567,12 @@ private fun SpeechRecognitionSandbox() {
             onListeningChanged = { isListening = it },
             onErrorMessage = { message ->
                 errorMessage = message
+                statusMessage = null
                 isListening = false
+            },
+            onStatusMessage = { message ->
+                statusMessage = message
+                errorMessage = null
             }
         )
     }
@@ -576,6 +582,7 @@ private fun SpeechRecognitionSandbox() {
 
     fun beginListening() {
         errorMessage = null
+        statusMessage = null
         finalText = ""
         partialText = ""
         recognitionController.startListening()
@@ -627,6 +634,11 @@ private fun SpeechRecognitionSandbox() {
             if (errorMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(errorMessage.orEmpty(), color = Red500, fontSize = 12.sp)
+            }
+
+            if (statusMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(statusMessage.orEmpty(), color = Green500, fontSize = 12.sp)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
