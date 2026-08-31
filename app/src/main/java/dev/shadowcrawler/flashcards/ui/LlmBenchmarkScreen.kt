@@ -111,7 +111,7 @@ fun LlmBenchmarkScreen(
 
             Text(
                 text = "Search Hugging Face and download a model on-device, or adb push a " +
-                    ".task file yourself to:\n${viewModel.modelsDirPath}",
+                    ".litertlm file yourself to:\n${viewModel.modelsDirPath}",
                 color = Slate400,
                 fontSize = 12.sp
             )
@@ -125,7 +125,7 @@ fun LlmBenchmarkScreen(
             }
 
             if (availableModels.isEmpty()) {
-                Text("No .task models found yet.", color = Slate400)
+                Text("No .litertlm models found yet.", color = Slate400)
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     availableModels.forEach { model ->

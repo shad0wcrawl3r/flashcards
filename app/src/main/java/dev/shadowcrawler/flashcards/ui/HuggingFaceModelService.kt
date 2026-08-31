@@ -24,10 +24,10 @@ data class HfRepoFile(
 
 /**
  * Talks to the public (unauthenticated) Hugging Face API, scoped to the `litert-community`
- * org — the curated source of `.task`/`.litertlm` files already converted for MediaPipe's LLM
- * Inference API, so search results are guaranteed to be the right format rather than arbitrary
- * Hugging Face models. Listing/searching needs no auth even for gated repos (e.g. Gemma); only
- * the actual file download in [ModelDownloader] does.
+ * org — the curated source of `.litertlm` files already converted for LiteRT-LM, so search
+ * results are guaranteed to be the right format rather than arbitrary Hugging Face models.
+ * Listing/searching needs no auth even for gated repos (e.g. Gemma); only the actual file
+ * download in [ModelDownloader] does.
  */
 class HuggingFaceModelService {
 
@@ -42,7 +42,7 @@ class HuggingFaceModelService {
     suspend fun listModelFiles(repoId: String): List<HfRepoFile> = withContext(Dispatchers.IO) {
         val url = "https://huggingface.co/api/models/$repoId/tree/main"
         json.decodeFromString<List<HfRepoFile>>(get(url))
-            .filter { it.type == "file" && (it.path.endsWith(".task") || it.path.endsWith(".litertlm")) }
+            .filter { it.type == "file" && it.path.endsWith(".litertlm") }
             .sortedBy { it.size }
     }
 

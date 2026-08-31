@@ -10,12 +10,12 @@ data class LocalLlmModel(
     val sizeMb: Long get() = file.length() / (1024 * 1024)
 }
 
-private val SUPPORTED_EXTENSIONS = setOf("task", "litertlm")
+private val SUPPORTED_EXTENSIONS = setOf("litertlm")
 
 /**
- * Model files are too large to bundle or fetch automatically — `adb push` a `.task` or
- * `.litertlm` file (e.g. a MediaPipe-converted Gemma/Phi/Falcon build) into [modelsDir] and
- * refresh. App-specific external storage needs no runtime permission on modern Android.
+ * Model files are too large to bundle or fetch automatically — `adb push` a `.litertlm` file
+ * (a LiteRT-LM build of Gemma/Llama/Phi/Qwen, etc.) into [modelsDir] and refresh. App-specific
+ * external storage needs no runtime permission on modern Android.
  */
 object LlmModelStore {
 

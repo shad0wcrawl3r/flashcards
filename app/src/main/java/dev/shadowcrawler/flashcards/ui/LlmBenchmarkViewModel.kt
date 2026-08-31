@@ -61,16 +61,7 @@ class LlmBenchmarkViewModel(
                 controller = LlmController.load(appContext, model.file.absolutePath)
                 _modelLoadState.value = ModelLoadState.Loaded(model.name)
             } catch (e: Exception) {
-                val rawMessage = e.message ?: "Failed to load model."
-                val message = if (rawMessage.contains("Sentencepiece tokenizer not found", ignoreCase = true)) {
-                    "$rawMessage\n\nThis engine version expects a SentencePiece tokenizer " +
-                        "(what Gemma models use). Non-Gemma families like Qwen use a different " +
-                        "tokenizer format and may not load even from an official litert-community " +
-                        "build — try a Gemma model instead."
-                } else {
-                    rawMessage
-                }
-                _modelLoadState.value = ModelLoadState.Error(message)
+                _modelLoadState.value = ModelLoadState.Error(e.message ?: "Failed to load model.")
             }
         }
     }

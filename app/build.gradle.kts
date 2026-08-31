@@ -65,7 +65,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.quickie.bundled)
     implementation(libs.zxing.core)
-    implementation(libs.mediapipe.tasks.genai)
+    implementation(libs.litertlm.android)
 //    implementation(libs.androidx.room.ktx)
 //    ksp(libs.androidx.room.compiler)
 }

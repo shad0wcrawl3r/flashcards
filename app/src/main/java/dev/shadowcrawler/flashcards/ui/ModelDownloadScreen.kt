@@ -80,7 +80,7 @@ fun ModelDownloadScreen(
             )
             Text(
                 text = "Searches the litert-community org on Hugging Face — models there are " +
-                    "already converted to a format MediaPipe can load, so anything found here works.",
+                    "already converted to a format LiteRT-LM can load, so anything found here works.",
                 color = Slate400,
                 fontSize = 12.sp
             )
@@ -142,7 +142,7 @@ fun ModelDownloadScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(current.repoId, color = Gray100, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         if (current.files.isEmpty()) {
-                            Text("No .task/.litertlm files in this repo.", color = Slate400)
+                            Text("No .litertlm files in this repo.", color = Slate400)
                         } else {
                             current.files.forEach { file ->
                                 val inProgress = downloadState as? DownloadUiState.InProgress

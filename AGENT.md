@@ -69,16 +69,19 @@ one up front:
    - `ui/SpeechRecognitionController.kt` — on-device `SpeechRecognizer` STT wrapper, exercised by
      a sandbox in the settings drawer (mic button, live partial/final transcript). Needs
      `RECORD_AUDIO` (declared in the manifest, requested at runtime).
-   - `ui/LlmController.kt` — wraps MediaPipe `com.google.mediapipe:tasks-genai:0.10.35`
-     (`LlmInference` / `LlmInferenceSession`). `generate(prompt, temperature, topK, randomSeed)`
-     opens a **fresh session per call** so sampling is explicit and reproducible, rather than
-     relying on the engine's implicit default session.
+   - `ui/LlmController.kt` — wraps `com.google.ai.edge.litertlm:litertlm-android:0.16.1`
+     (`Engine` / `Session`). `generate(prompt, temperature, topK, randomSeed)` opens a **fresh
+     raw `Session` per call** (not the chat-templated `Conversation` API) so sampling is explicit
+     and reproducible and nothing leaks between calls. Migrated off MediaPipe's LLM Inference API
+     on 2026-08-31 — that API is now deprecated/maintenance-only; LiteRT-LM is Google's named
+     successor and adds support for model families beyond Gemma's SentencePiece tokenizer.
    - `ui/LlmModelStore.kt` — scans `context.getExternalFilesDir(null)/llm_models/` for
-     `.task`/`.litertlm` files (app-specific external storage, no runtime permission needed).
+     `.litertlm` files (app-specific external storage, no runtime permission needed). MediaPipe's
+     old `.task` format is no longer accepted — the new engine can't load it.
    - `ui/HuggingFaceModelService.kt` + `ui/ModelDownloader.kt` +
      `ui/ModelDownloadViewModel.kt`/`ModelDownloadScreen.kt` — in-app model search, scoped to the
-     `litert-community` Hugging Face org (pre-converted, MediaPipe-compatible models only, so
-     search results are guaranteed to be the right format), and a streaming download with
+     `litert-community` Hugging Face org (pre-converted, LiteRT-LM-compatible `.litertlm` models
+     only, so search results are guaranteed to be the right format), and a streaming download with
      progress + cancel, writing straight into the `llm_models/` dir — no PC download + `adb push`
      round-trip needed. Gated models (all of Gemma) need a Hugging Face access token — entered on
      the download screen, persisted via `SettingsViewModel.huggingFaceToken` (**plain
@@ -97,15 +100,14 @@ one up front:
 - **Model choice: `gemma-3-270m-it`.** Small, fast, Gemma family (confirmed-compatible tokenizer
   — see below). The plan if its out-of-the-box grading quality isn't good enough is to **fine-tune
   this specific model**, not shop for a different base model first.
-- **Gemma works, Qwen doesn't.** `litert-community/Qwen3.5-0.8B` — an official, correctly-sourced
-  `litert-community` conversion, not a sketchy third-party one — fails to load with
-  `INVALID_ARGUMENT: Sentencepiece tokenizer not found in model`. Gemma models use a
-  SentencePiece tokenizer; Qwen uses a different (BPE-style) one. The native engine
-  (`libllm_inference_engine_jni.so`, confirmed via `strings`) has some
-  `LitertLmLoader::GetHuggingFaceTokenizer` code path, but it isn't fully wired up in
-  `tasks-genai` 0.10.35 (the latest published version at the time this was checked — there was no
-  newer version to try bumping to). Treat non-Gemma / non-SentencePiece model families as
-  unsupported until this is re-verified against a newer engine release.
+- **Gemma-vs-Qwen tokenizer limitation was MediaPipe-specific, now resolved by migrating to
+  LiteRT-LM (2026-08-31) — not yet re-verified on-device.** Under the old MediaPipe engine
+  (`tasks-genai` 0.10.35), loading `litert-community/Qwen3.5-0.8B` — an official, correctly-sourced
+  conversion, not a sketchy third-party one — failed with `INVALID_ARGUMENT: Sentencepiece
+  tokenizer not found in model` (Gemma uses SentencePiece; Qwen uses a different BPE-style
+  tokenizer that engine version didn't fully support). LiteRT-LM's own docs list Gemma, Llama,
+  Phi-4, and Qwen as supported, so this should now be fixed, but nobody has actually loaded a
+  Qwen `.litertlm` file against the new engine yet — treat that as unverified until someone does.
 - **Sampling noise looks like model unreliability if you don't control for it.** The engine's
   implicit default session samples at temperature 0.8; a single run flip-flopped
   MATCH→NO_MATCH on an *identical* prompt purely from that, not from the model actually being
@@ -116,13 +118,12 @@ one up front:
   `REASON:` lines) rather than reverting to freeform prose — that's what makes the Runs
   consistency-check in the benchmark screen actually work. `CONFIDENCE` is there so you can tell
   "the model is unsure" apart from "the model is confidently wrong" when repeated runs disagree.
-- **Don't trust `tasks-genai`'s official Kotlin doc snippets at face value.** The public guide
-  (ai.google.dev/edge/mediapipe/.../llm_inference/android) shows `LlmInferenceOptions.Builder`
-  with `.setTopK()`/`.setTemperature()`/`.setRandomSeed()` — those methods don't exist there in
-  0.10.35 (confirmed by decompiling the actual AAR from the Gradle cache and running `javap` on
-  it). Those params moved to `LlmInferenceSession.LlmInferenceSessionOptions.Builder`. Before
-  writing code against a new version of this dependency, decompile and check rather than
-  trusting the sample code.
+- **`litertlm-android`'s published Kotlin docs are accurate** (unlike the old MediaPipe
+  `tasks-genai` guide, whose sample code didn't match its real 0.10.35 API surface). For anything
+  the `docs/api/kotlin/getting_started.md` guide doesn't cover, the actual source is public at
+  `raw.githubusercontent.com/google-ai-edge/LiteRT-LM/main/kotlin/java/com/google/ai/edge/litertlm/*.kt`
+  — read that rather than guessing. Either way, verify any dependency/API change by actually
+  running `JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug`.
 
 ## Not done yet
 
