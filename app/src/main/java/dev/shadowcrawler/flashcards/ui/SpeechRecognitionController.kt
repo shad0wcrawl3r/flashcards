@@ -3,6 +3,7 @@ package dev.shadowcrawler.flashcards.ui
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.speech.ModelDownloadListener
 import android.speech.RecognitionListener
 import android.speech.RecognitionSupport
 import android.speech.RecognitionSupportCallback
@@ -24,7 +25,8 @@ class SpeechRecognitionController internal constructor(
     private val onPartialResult: (String) -> Unit,
     private val onFinalResult: (String) -> Unit,
     private val onListeningChanged: (Boolean) -> Unit,
-    private val onErrorMessage: (String) -> Unit
+    private val onErrorMessage: (String) -> Unit,
+    private val onStatusMessage: (String) -> Unit
 ) {
 
     private val recognizer: SpeechRecognizer? =
@@ -118,17 +120,45 @@ class SpeechRecognitionController internal constructor(
         recognizer?.startListening(intent)
     }
 
+    /**
+     * The plain `triggerModelDownload(Intent)` overload is fire-and-forget — no progress, no
+     * completion signal anywhere (confirmed: a real download completed silently with nothing in
+     * the system Downloads notification or the app). This overload reports back via
+     * [SpeechRecognizer.ModelDownloadListener] instead, so the sandbox can show real progress
+     * and a completion message rather than leaving the user to guess and retry blindly.
+     */
     private fun requestLanguageDownload(languageTag: String) {
         val downloadIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
         }
-        recognizer?.triggerModelDownload(downloadIntent)
         onListeningChanged(false)
-        onErrorMessage(
-            "No on-device language pack was installed yet — requested a download for " +
-                "'$languageTag'. This needs a network connection and can take a moment; " +
-                "try Start listening again shortly."
+        onStatusMessage("Requesting on-device language pack for '$languageTag'…")
+        recognizer?.triggerModelDownload(
+            downloadIntent,
+            context.mainExecutor,
+            object : ModelDownloadListener {
+                override fun onProgress(completedPercent: Int) {
+                    Log.d(TAG, "Model download progress for '$languageTag': $completedPercent%")
+                    onStatusMessage("Downloading '$languageTag' language pack: $completedPercent%")
+                }
+
+                override fun onSuccess() {
+                    Log.i(TAG, "Model download succeeded for '$languageTag'")
+                    onStatusMessage("'$languageTag' language pack is ready — tap Start listening again.")
+                }
+
+                override fun onScheduled() {
+                    Log.i(TAG, "Model download scheduled for '$languageTag' (deferred, e.g. waiting for Wi-Fi)")
+                    onStatusMessage("Download for '$languageTag' scheduled — it'll run when conditions allow (e.g. on Wi-Fi).")
+                }
+
+                override fun onError(error: Int) {
+                    val message = describeError(error)
+                    Log.w(TAG, "Model download failed for '$languageTag' ($error): $message")
+                    onErrorMessage("Language pack download failed: $message")
+                }
+            }
         )
     }
 
