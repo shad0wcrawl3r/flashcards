@@ -24,12 +24,16 @@ LLM-based answer grading.
   ```
 - Android SDK path is already set in `local.properties` (gitignored, not committed) —
   `sdk.dir=<path to>/Android/Sdk`. `platform-tools` (`adb`) is expected to already be on `PATH`.
-- If a device/emulator is connected, **`adb shell input tap/swipe/...` is blocked** in at least
-  some dev setups — it throws `SecurityException: ... requires INJECT_EVENTS permission`. Don't
-  assume you can drive the UI that way. Use Compose instrumented tests (`app/src/androidTest`,
-  run via Gradle) for programmatic UI interaction, or ask the human to test manually on-device.
-  Verify this still holds in your own environment rather than assuming — it may be specific to
-  a particular sandboxing setup.
+- If a device/emulator is connected, **`adb shell input tap/swipe/...` may or may not be
+  blocked — it's per-device, not a project-wide constant.** One test device threw
+  `SecurityException: ... requires INJECT_EVENTS permission` on every input event; a different
+  one (`CPH2569`) accepted taps/swipes fine over the same adb connection. Check with a throwaway
+  `adb shell input tap 0 0` before relying on it either way, rather than assuming from a prior
+  session. When it does work and the connected device is a real personal phone (not an
+  emulator), stay inside the app under test — don't navigate elsewhere on the home screen or
+  poke at other installed apps. Where it's blocked, use Compose instrumented tests
+  (`app/src/androidTest`, run via Gradle) for programmatic UI interaction, or ask the human to
+  test manually.
 
 ## Architecture at a glance
 
@@ -94,6 +98,35 @@ one up front:
      seed+1, seed+2…) to see the actual spread of answers. Each run shows latency plus a parsed
      `VERDICT` badge; running more than once shows a consistency summary ("Consistent across 3
      runs: CORRECT" / "Inconsistent across runs: 2× CORRECT, 1× INCORRECT").
+
+## Recent work (2026-08-31): fixed STT "Unknown recognition error (12)"
+
+Reported on a new test device (`CPH2569`, system locale `en-NP`): the recognition sandbox threw
+error 12 with no useful message. Root cause, confirmed live via `adb logcat` on the device:
+`SpeechRecognizer.checkRecognitionSupport()` reported `installed=[]` — **zero on-device speech
+language packs downloaded at all**, against 31 languages the recognizer service *supports*. Not
+a locale-mismatch edge case specifically; this device simply never had any pack downloaded, and
+`startListening()` never set `EXTRA_LANGUAGE`, so it silently inherited the (unsupported) system
+locale and got `ERROR_LANGUAGE_NOT_SUPPORTED`.
+
+`ui/SpeechRecognitionController.kt` now:
+- Calls `checkRecognitionSupport()` before starting, and picks a language that's actually
+  installed on-device rather than trusting the system locale.
+- If nothing's installed, calls `SpeechRecognizer.triggerModelDownload()` to request the pack
+  instead of guaranteeing a failed listen attempt, and surfaces an actionable message
+  ("requested a download for 'en-US' — try again shortly").
+- Fills in `describeError()` for error codes 10-15 (`ERROR_TOO_MANY_REQUESTS`,
+  `ERROR_SERVER_DISCONNECTED`, `ERROR_LANGUAGE_NOT_SUPPORTED`, `ERROR_LANGUAGE_UNAVAILABLE`,
+  `ERROR_CANNOT_CHECK_SUPPORT`, `ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS`), which weren't mapped
+  before — that's why 12 fell through to "Unknown recognition error (12)".
+- Logs `onError` and the `checkRecognitionSupport` outcome via `Log.w`/`Log.d` under tag
+  `"SpeechRecognition"` (`adb logcat -s SpeechRecognition`).
+
+Verified live on the reporting device: before the fix, `onError` fired with code 12 and nothing
+else. After, the new path correctly detected `installed=[]` and requested a download instead of
+listening. **Not yet verified**: whether the triggered download actually completes and lets
+recognition succeed afterward — the device locked (idle timeout) mid-session before that retry
+could happen. Worth a manual check next time the sandbox is used.
 
 ## Findings to build on, not re-derive
 
