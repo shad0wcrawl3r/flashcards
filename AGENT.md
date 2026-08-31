@@ -121,12 +121,22 @@ locale and got `ERROR_LANGUAGE_NOT_SUPPORTED`.
   before — that's why 12 fell through to "Unknown recognition error (12)".
 - Logs `onError` and the `checkRecognitionSupport` outcome via `Log.w`/`Log.d` under tag
   `"SpeechRecognition"` (`adb logcat -s SpeechRecognition`).
+- Uses the callback-based `SpeechRecognizer.triggerModelDownload(Intent, Executor,
+  ModelDownloadListener)` overload — **not** the plain `triggerModelDownload(Intent)` one, which
+  is fire-and-forget with no progress or completion signal anywhere (confirmed on-device: a real
+  download completed silently, with nothing in the system Downloads notification or the app —
+  the only sign was that recognition started working after the device was unlocked later).
+  `android.speech.ModelDownloadListener` is a **top-level class in `android.speech`, not a nested
+  class of `SpeechRecognizer`** (`SpeechRecognizer.ModelDownloadListener` doesn't compile —
+  confirmed by decompiling `android.jar` from the SDK platform with `javap`, same lesson as the
+  MediaPipe docs below: don't trust a plausible-looking qualified name, check the actual class).
+  The sandbox now shows `onProgress`/`onSuccess`/`onScheduled`/`onError` as a live status message.
 
-Verified live on the reporting device: before the fix, `onError` fired with code 12 and nothing
-else. After, the new path correctly detected `installed=[]` and requested a download instead of
-listening. **Not yet verified**: whether the triggered download actually completes and lets
-recognition succeed afterward — the device locked (idle timeout) mid-session before that retry
-could happen. Worth a manual check next time the sandbox is used.
+**Fully verified end-to-end on the reporting device**, including the previously-open question
+of whether the triggered download actually completes: it does — recognition started working
+after the device was unlocked following a background download. The gap was purely *visibility*
+(nothing surfaced the download happening or finishing), which the `ModelDownloadListener`
+wiring above now fixes.
 
 ## Findings to build on, not re-derive
 
