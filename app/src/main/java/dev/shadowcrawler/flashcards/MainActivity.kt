@@ -77,6 +77,7 @@ import dev.shadowcrawler.flashcards.ui.BackButton
 import dev.shadowcrawler.flashcards.ui.DeckEditorScreen
 import dev.shadowcrawler.flashcards.ui.DeckSelectionScreen
 import dev.shadowcrawler.flashcards.ui.ImportScreen
+import dev.shadowcrawler.flashcards.ui.LayaBenchmarkScreen
 import dev.shadowcrawler.flashcards.ui.LlmBenchmarkScreen
 import dev.shadowcrawler.flashcards.ui.ModelDownloadScreen
 import dev.shadowcrawler.flashcards.ui.FlashcardViewModel
@@ -103,6 +104,7 @@ private const val ROUTE_FLASHCARDS = "flashcards/{deckId}"
 private const val ROUTE_IMPORT = "import"
 private const val ROUTE_DECK_EDITOR = "deckEditor/{deckId}"
 private const val ROUTE_LLM_BENCHMARK = "llmBenchmark"
+private const val ROUTE_LAYA_BENCHMARK = "layaBenchmark"
 private const val ROUTE_MODEL_DOWNLOAD = "modelDownload"
 private const val ARG_DECK_ID = "deckId"
 /** Sentinel passed as the deckId route arg to open the editor in create-new-deck mode. */
@@ -152,7 +154,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onOpenLlmBenchmark = {
                                     navController.navigate(ROUTE_LLM_BENCHMARK)
-                                }
+                                },
+                                onOpenLayaBenchmark = { navController.navigate(ROUTE_LAYA_BENCHMARK) }
                             )
 
                         }
@@ -161,6 +164,13 @@ class MainActivity : ComponentActivity() {
                             LlmBenchmarkScreen(
                                 onBack = { navController.popBackStack() },
                                 onOpenModelDownload = { navController.navigate(ROUTE_MODEL_DOWNLOAD) }
+                            )
+                        }
+
+                        composable(ROUTE_LAYA_BENCHMARK) {
+                            LayaBenchmarkScreen(
+                                onBack = { navController.popBackStack() },
+                                settingsViewModel = settingsViewModel
                             )
                         }
 

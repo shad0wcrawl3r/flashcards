@@ -15,6 +15,7 @@ navigationCompose = "2.10.0"
 quickie = "1.12.0"
 zxing = "3.5.3"
 litertlm = "0.16.1"
+litert = "2.2.0"
 
 
 [libraries]
@@ -39,6 +40,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 quickie-bundled = { group = "io.github.g00fy2.quickie", name = "quickie-bundled", version.ref = "quickie" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 
 
 [plugins]

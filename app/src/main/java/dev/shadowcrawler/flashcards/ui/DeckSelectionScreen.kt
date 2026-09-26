@@ -98,7 +98,8 @@ fun DeckSelectionScreen(
     onImportDeck: () -> Unit,
     onCreateDeck: () -> Unit,
     onEditDeck: (Long) -> Unit,
-    onOpenLlmBenchmark: () -> Unit
+    onOpenLlmBenchmark: () -> Unit,
+    onOpenLayaBenchmark: () -> Unit
 ) {
     val context = LocalContext.current
     val viewModel: DeckListViewModel = viewModel(
@@ -261,6 +262,10 @@ fun DeckSelectionScreen(
             onOpenLlmBenchmark = {
                 showSettingsMenu = false
                 onOpenLlmBenchmark()
+            },
+            onOpenLayaBenchmark = {
+                showSettingsMenu = false
+                onOpenLayaBenchmark()
             }
         )
     }
@@ -416,7 +421,8 @@ private fun BoxScope.SettingsMenuOverlay(
     onTtsEnabledChange: (Boolean) -> Unit,
     onDeviceRecognitionEnabled: Boolean,
     onOnDeviceRecognitionEnabledChange: (Boolean) -> Unit,
-    onOpenLlmBenchmark: () -> Unit
+    onOpenLlmBenchmark: () -> Unit,
+    onOpenLayaBenchmark: () -> Unit
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -508,6 +514,23 @@ private fun BoxScope.SettingsMenuOverlay(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             "Load a local on-device model and test how well it judges answers.",
+                            color = Slate400,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    onClick = onOpenLayaBenchmark,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Navy900
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Open Laya judge →", color = Gray100, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "Typed-decision model (not a freeform LLM) — 82.6% on the Python eval set.",
                             color = Slate400,
                             fontSize = 12.sp
                         )

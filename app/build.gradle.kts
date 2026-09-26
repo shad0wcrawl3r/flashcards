@@ -66,6 +66,14 @@ dependencies {
     implementation(libs.quickie.bundled)
     implementation(libs.zxing.core)
     implementation(libs.litertlm.android)
+    implementation(libs.litert)
 //    implementation(libs.androidx.room.ktx)
 //    ksp(libs.androidx.room.compiler)
+}
+
+// Forwards an optional local fixture path into unit tests' forked JVM — Gradle doesn't do this
+// automatically for -D flags passed on the command line. Used by LayaTokenizerPortTest, which
+// skips itself when this isn't set (the 34 MB tokenizer.json isn't checked into the repo).
+tasks.withType<Test> {
+    System.getProperty("laya.tokenizerJson")?.let { systemProperty("laya.tokenizerJson", it) }
 }
