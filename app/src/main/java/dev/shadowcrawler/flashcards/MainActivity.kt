@@ -1,10 +1,14 @@
 package dev.shadowcrawler.flashcards
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.SpeechRecognizer
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -53,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -60,9 +65,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -84,6 +91,8 @@ import dev.shadowcrawler.flashcards.ui.FlashcardViewModel
 import dev.shadowcrawler.flashcards.ui.FlashcardViewModelFactory
 import dev.shadowcrawler.flashcards.ui.SettingsViewModel
 import dev.shadowcrawler.flashcards.ui.SettingsViewModelFactory
+import dev.shadowcrawler.flashcards.ui.HandsFreeState
+import dev.shadowcrawler.flashcards.ui.rememberHandsFreeController
 import dev.shadowcrawler.flashcards.ui.rememberTtsController
 import dev.shadowcrawler.flashcards.ui.theme.FlashcardsTheme
 import dev.shadowcrawler.flashcards.ui.theme.Blue600
@@ -98,6 +107,10 @@ import androidx.core.graphics.drawable.toDrawable
 // Scoring doesn't work well with the current swipe/reveal flow yet — disabled for now,
 // not removed. The score tracking below stays in place so it's easy to bring back.
 private const val SCORING_ENABLED = false
+
+// Gives the user a moment to actually process the spoken correct answer before the card
+// changes out from under them — hands-free has no swipe to pace themselves with otherwise.
+private const val HANDS_FREE_ADVANCE_DELAY_MS = 1800L
 
 private const val ROUTE_DECK_SELECTION = "deckSelection"
 private const val ROUTE_FLASHCARDS = "flashcards/{deckId}"
@@ -239,9 +252,38 @@ fun FlashcardScreen(
     var cardSequence by remember(flashcards) { mutableIntStateOf(0) }
 
     val ttsEnabled by settingsViewModel.ttsEnabled.collectAsState()
+    val onDeviceRecognitionEnabled by settingsViewModel.onDeviceRecognitionEnabled.collectAsState()
+    val handsFreeAssessmentEnabled by settingsViewModel.handsFreeAssessmentEnabled.collectAsState()
+    val handsFreeActive = ttsEnabled && onDeviceRecognitionEnabled && handsFreeAssessmentEnabled
+
     val ttsController = rememberTtsController()
-    // Stop mid-utterance so leftover speech from the previous card doesn't bleed into the next.
-    LaunchedEffect(cardSequence) { ttsController.stop() }
+    val handsFreeController = rememberHandsFreeController()
+    val handsFreeState by handsFreeController.state.collectAsState()
+
+    val context = LocalContext.current
+    var micPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> micPermissionGranted = granted }
+    // Ask once, as soon as hands-free assessment is actually usable, rather than mid-question —
+    // a permission dialog stealing focus right after TTS finishes speaking would be jarring.
+    LaunchedEffect(handsFreeActive) {
+        if (handsFreeActive && !micPermissionGranted) {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // Stop mid-utterance so leftover speech from the previous card doesn't bleed into the next,
+    // and drop any hands-free result/error from the card just left.
+    LaunchedEffect(cardSequence) {
+        ttsController.stop()
+        handsFreeController.reset()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         BackButton(
@@ -416,9 +458,34 @@ fun FlashcardScreen(
                         }
 
                         // Auto-read whenever this state (new card, or answer just revealed)
-                        // first appears — only while TTS is toggled on.
+                        // first appears — only while TTS is toggled on. Under hands-free
+                        // assessment, start listening once the question (and, for MCQ, its
+                        // choices) finish being read rather than waiting for a tap; once a QA
+                        // card's answer has been read back after a hands-free verdict, pause
+                        // briefly and advance automatically too — hands-free means no swipe.
                         LaunchedEffect(state) {
-                            if (ttsEnabled) ttsController.speak(textToSpeak)
+                            if (!ttsEnabled) return@LaunchedEffect
+                            val shouldListen = handsFreeActive && micPermissionGranted &&
+                                ((state.card.type == CardType.QA && !state.showingAnswer) ||
+                                    (state.card.type == CardType.MCQ && selectedChoice == null))
+                            val shouldAutoAdvance = handsFreeActive &&
+                                state.card.type == CardType.QA && state.showingAnswer &&
+                                (handsFreeState is HandsFreeState.Result || handsFreeState == HandsFreeState.Passed)
+                            ttsController.speakAndAwait(textToSpeak)
+                            if (shouldListen) {
+                                when (state.card.type) {
+                                    CardType.QA -> handsFreeController.startListeningForAnswer(
+                                        question = state.card.question,
+                                        correctAnswer = state.card.answer
+                                    )
+                                    CardType.MCQ -> handsFreeController.startListeningForChoice(
+                                        state.card.choices
+                                    )
+                                }
+                            } else if (shouldAutoAdvance) {
+                                delay(HANDS_FREE_ADVANCE_DELAY_MS)
+                                advance()
+                            }
                         }
 
                         SpeakerButton(
@@ -431,7 +498,53 @@ fun FlashcardScreen(
                 }
             }
 
+            // Once a verdict is in, speak it, then move on — sequenced as a plain top-to-bottom
+            // coroutine via speakAndAwait() so utterances don't talk over each other. QA reveals
+            // the answer (which itself triggers the auto-advance above, once the answer has been
+            // read back too); MCQ has no separate reveal step, so it speaks the verdict and the
+            // correct answer here directly, then pauses before advancing.
+            LaunchedEffect(handsFreeState) {
+                when (val current = handsFreeState) {
+                    is HandsFreeState.Result -> {
+                        val verdictText = if (current.judgeResult.verdict == "CORRECT") "Correct." else "Incorrect."
+                        ttsController.speakAndAwait(verdictText)
+                        showAnswer = true
+                    }
+                    is HandsFreeState.ChoiceResult -> {
+                        val matched = current.matchedChoice
+                        if (matched != null) {
+                            selectedChoice = matched
+                            val verdictText = if (matched == currentCard.answer) "Correct." else "Incorrect."
+                            ttsController.speakAndAwait(verdictText)
+                            ttsController.speakAndAwait(currentCard.answer)
+                            delay(HANDS_FREE_ADVANCE_DELAY_MS)
+                            advance()
+                        } else {
+                            ttsController.speak("Sorry, I didn't catch a valid answer. Please tap your answer.")
+                        }
+                    }
+                    HandsFreeState.Passed -> {
+                        // No "Correct."/"Incorrect." — straight to the answer. QA reveals via
+                        // showAnswer (the state-effect above speaks it and then advances, since
+                        // Passed is included in that shouldAutoAdvance check); MCQ has no
+                        // separate reveal step, so it's spoken and advanced right here.
+                        when (currentCard.type) {
+                            CardType.QA -> showAnswer = true
+                            CardType.MCQ -> {
+                                selectedChoice = currentCard.answer
+                                ttsController.speakAndAwait(currentCard.answer)
+                                delay(HANDS_FREE_ADVANCE_DELAY_MS)
+                                advance()
+                            }
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
+
+            HandsFreeStatusText(handsFreeState, correctChoice = currentCard.answer)
 
             Text(
                 text = when {
@@ -444,6 +557,33 @@ fun FlashcardScreen(
             )
         }
     }
+}
+
+@Composable
+private fun HandsFreeStatusText(state: HandsFreeState, correctChoice: String? = null) {
+    val (text, color) = when (state) {
+        HandsFreeState.Idle -> return
+        HandsFreeState.Listening -> "🎤 Listening for your answer…" to Slate400
+        is HandsFreeState.Processing -> "Grading \"${state.transcript}\"…" to Slate400
+        is HandsFreeState.Result -> {
+            val verdict = state.judgeResult.verdict
+            "You said \"${state.transcript}\" — $verdict" to
+                if (verdict == "CORRECT") Green500 else Red500
+        }
+        is HandsFreeState.ChoiceResult -> {
+            val matched = state.matchedChoice
+            if (matched == null) {
+                "Didn't catch a valid answer — tap your answer instead." to Red500
+            } else {
+                "You said \"${state.transcript}\" → $matched" to
+                    if (matched == correctChoice) Green500 else Red500
+            }
+        }
+        HandsFreeState.Passed -> "Passed — here's the answer." to Slate400
+        is HandsFreeState.Error -> "Hands-free: ${state.message}" to Red500
+    }
+    Text(text, color = color, fontSize = 13.sp, textAlign = TextAlign.Center)
+    Spacer(modifier = Modifier.height(8.dp))
 }
 
 @Composable

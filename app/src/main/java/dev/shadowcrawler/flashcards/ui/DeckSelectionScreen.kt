@@ -121,6 +121,7 @@ fun DeckSelectionScreen(
     val onDeviceRecognitionAvailable = remember { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }
     val ttsEnabled by settingsViewModel.ttsEnabled.collectAsState()
     val onDeviceRecognitionEnabled by settingsViewModel.onDeviceRecognitionEnabled.collectAsState()
+    val handsFreeAssessmentEnabled by settingsViewModel.handsFreeAssessmentEnabled.collectAsState()
 
     val isSelectionMode = selectedDeckIds.isNotEmpty()
 
@@ -259,6 +260,8 @@ fun DeckSelectionScreen(
             onTtsEnabledChange = settingsViewModel::setTtsEnabled,
             onDeviceRecognitionEnabled = onDeviceRecognitionEnabled,
             onOnDeviceRecognitionEnabledChange = settingsViewModel::setOnDeviceRecognitionEnabled,
+            handsFreeAssessmentEnabled = handsFreeAssessmentEnabled,
+            onHandsFreeAssessmentEnabledChange = settingsViewModel::setHandsFreeAssessmentEnabled,
             onOpenLlmBenchmark = {
                 showSettingsMenu = false
                 onOpenLlmBenchmark()
@@ -421,6 +424,8 @@ private fun BoxScope.SettingsMenuOverlay(
     onTtsEnabledChange: (Boolean) -> Unit,
     onDeviceRecognitionEnabled: Boolean,
     onOnDeviceRecognitionEnabledChange: (Boolean) -> Unit,
+    handsFreeAssessmentEnabled: Boolean,
+    onHandsFreeAssessmentEnabledChange: (Boolean) -> Unit,
     onOpenLlmBenchmark: () -> Unit,
     onOpenLayaBenchmark: () -> Unit
 ) {
@@ -490,9 +495,19 @@ private fun BoxScope.SettingsMenuOverlay(
                     Spacer(modifier = Modifier.height(20.dp))
                     SettingsToggleRow(
                         label = "On-device speech recognition",
-                        description = "Answer cards by speaking. Coming soon.",
+                        description = "Answer cards by speaking.",
                         checked = onDeviceRecognitionEnabled,
                         onCheckedChange = onOnDeviceRecognitionEnabledChange
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    SettingsToggleRow(
+                        label = "Hands-free assessment",
+                        description = "With TTS and speech recognition both on, listen for your " +
+                            "answer after the question is read and grade it automatically with " +
+                            "the on-device Laya judge (download it below first).",
+                        checked = handsFreeAssessmentEnabled,
+                        onCheckedChange = onHandsFreeAssessmentEnabledChange
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 private const val PREFS_NAME = "settings"
 private const val KEY_TTS_ENABLED = "tts_enabled"
 private const val KEY_ON_DEVICE_RECOGNITION_ENABLED = "on_device_recognition_enabled"
+private const val KEY_HANDS_FREE_ASSESSMENT_ENABLED = "hands_free_assessment_enabled"
 private const val KEY_HUGGING_FACE_TOKEN = "hugging_face_token"
 
 /**
@@ -37,6 +38,18 @@ class SettingsViewModel(context: Context) : ViewModel() {
     fun setOnDeviceRecognitionEnabled(enabled: Boolean) {
         _onDeviceRecognitionEnabled.value = enabled
         prefs.edit { putBoolean(KEY_ON_DEVICE_RECOGNITION_ENABLED, enabled) }
+    }
+
+    // Deliberately a separate toggle from TTS/on-device recognition rather than implied by
+    // "both are on" — the automated listen-and-grade loop is a bigger behavior change than
+    // either alone, so it gets its own explicit opt-in.
+    private val _handsFreeAssessmentEnabled =
+        MutableStateFlow(prefs.getBoolean(KEY_HANDS_FREE_ASSESSMENT_ENABLED, false))
+    val handsFreeAssessmentEnabled: StateFlow<Boolean> = _handsFreeAssessmentEnabled.asStateFlow()
+
+    fun setHandsFreeAssessmentEnabled(enabled: Boolean) {
+        _handsFreeAssessmentEnabled.value = enabled
+        prefs.edit { putBoolean(KEY_HANDS_FREE_ASSESSMENT_ENABLED, enabled) }
     }
 
     // Stored in plain SharedPreferences, not encrypted — acceptable for a personal read-scoped
